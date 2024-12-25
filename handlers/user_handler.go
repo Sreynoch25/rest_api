@@ -60,11 +60,22 @@ func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 	}
 
 	// Insert the user into the database
+	// query := `
+	// INSERT INTO users (first_name, last_name, email, password, phone, address, created_at, updated_at)
+	// VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	// RETURNING id, first_name, last_name, email, phone, address, created_at, updated_at
+	// `
+
 	query := `
-	INSERT INTO users (first_name, last_name, email, password, phone, address, created_at, updated_at)
-	VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-	RETURNING id, first_name, last_name, email, phone, address, created_at, updated_at
-	`
+    INSERT INTO tbl_users (
+        last_name, first_name, user_name, login_id, email, password,
+        role_name, role_id, is_admin, login_session, last_login,
+        currency_id, language_id, status_id, "order",
+        created_by, updated_by, deleted_at
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      *`
+
 	err = h.db.QueryRow(
 		query,
 		user.FirstName,
@@ -116,6 +127,7 @@ func (h *UserHandler) GetUsers(c *fiber.Ctx) error {
 			&user.Address,
 			&user.CreatedAt,
 			&user.UpdatedAt,
+			&user.DeletedAt,
 		)
 
 		if err != nil {
@@ -135,7 +147,7 @@ func (h *UserHandler) GetUser(c *fiber.Ctx) error {
 	id := c.Params("id")
 
 	query := `
-		SELECT id, first_name, last_name, email, phone, address, created_at, updated_at
+		SELECT id, first_name, last_name, email, phone, address, created_at, updated_at, deleted_at
 	FROM users
 	WHERE id = $1
 	`
@@ -149,6 +161,7 @@ func (h *UserHandler) GetUser(c *fiber.Ctx) error {
 		&user.Address,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.DeletedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -203,7 +216,7 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		address = $5,
 		updated_at = CURRENT_TIMESTAMP
 	WHERE id = $6
-	RETURNING id, first_name, last_name, email, phone, address, created_at, updated_at
+	RETURNING id, first_name, last_name, email, phone, address, created_at, updated_at, 
 	`
 
 	err = h.db.QueryRow(
@@ -223,6 +236,7 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 		&user.Address,
 		&user.CreatedAt,
 		&user.UpdatedAt,
+		&user.DeletedAt,
 	)
 
 	if err != nil {
@@ -270,4 +284,3 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 		"message": "User deleted successfully",
 	})
 }
-
