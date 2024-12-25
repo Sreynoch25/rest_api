@@ -29,6 +29,10 @@ func ValidateUser(user *models.User) error {
         return errors.New("invalid email format")
     }
 
+	if len(user.Password) < 6 {
+        return errors.New("password must be at least 6 characters")
+    }
+	
     if user.Phone != "" && !ValidatePhone(user.Phone) {
         return errors.New("invalid phone format")
     }
