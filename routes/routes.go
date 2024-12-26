@@ -22,4 +22,5 @@ func SetupRoutes(app *fiber.App, db *sql.DB) {
 	users.Get("/:id", userHandler.GetUser)
 	users.Put("/:id", userHandler.UpdateUser)
 	users.Delete("/:id", userHandler.DeleteUser)
+	users.Post("/login", userHandler.Login)
 }

@@ -26,3 +26,15 @@ type User struct {
 	DeletedBy    *int       `json:"deleted_by"`
 	DeletedAt    *time.Time `json:"deleted_at"`
 }
+
+
+type UserLogin struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+}
+
+type LoginResponse struct {
+	Token string `json:"token"`
+	User  *User  `json:"user"`
+	ExpiredAt time.Time `json:"expired_at"`
+}
