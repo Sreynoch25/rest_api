@@ -1,256 +1,230 @@
 package handlers
 
 import (
-	"database/sql"
-	"fiber-crud/models"
-	"fiber-crud/utils"
-	"fmt"
+    "database/sql"
+    "fiber-crud/models"
+    "fiber-crud/utils"
+    "fmt"
 
-	"github.com/gofiber/fiber/v2"
+    "github.com/gofiber/fiber/v2"
 )
 
 type UserHandler struct {
-	db *sql.DB
+    db *sql.DB
 }
 
 func NewUserHandler(db *sql.DB) *UserHandler {
-	return &UserHandler{db: db}
+    return &UserHandler{db: db}
 }
 
-// FUNCTION CREATE USER
 func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
-	// fmt.Println("hello")
-	user := new(models.User)
+    user := new(models.User)
 
-	// Parse the request body into the user model
-	if err := c.BodyParser(user); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
+    if err := c.BodyParser(user); err != nil {
+        return c.Status(400).JSON(fiber.Map{
+            "error": "Invalid request body",
+        })
+    }
 
-	// Validate user fields
-	if err := utils.ValidateUser(user); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": err.Error(),
-		})
-	}
+    if err := utils.ValidateUser(user); err != nil {
+        return c.Status(400).JSON(fiber.Map{
+            "error": err.Error(),
+        })
+    }
 
-	// Check if the email already exists
-	var emailExists bool
-	checkQuery := `SELECT EXISTS (SELECT 1 FROM users WHERE email = $1)`
-	err := h.db.QueryRow(checkQuery, user.Email).Scan(&emailExists)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error checking email",
-		})
-	}
-	if emailExists {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Email already exists",
-		})
-	}
+    // Check if email already exists
+    var emailExists bool
+    err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM tbl_users WHERE email = $1 AND deleted_at IS NULL)", user.Email).Scan(&emailExists)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Error checking email",
+        })
+    }
+    if emailExists {
+        return c.Status(400).JSON(fiber.Map{
+            "error": "Email already exists",
+        })
+    }
 
-	// Hash the user's password
-	hashedPassword, err := utils.HashPassword(user.Password)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error processing password",
-		})
-	}
+    hashedPassword, err := utils.HashPassword(user.Password)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Error processing password",
+        })
+    }
 
-	// Insert the user into the database
-	// query := `
-	// INSERT INTO users (first_name, last_name, email, password, phone, address, created_at, updated_at)
-	// VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-	// RETURNING id, first_name, last_name, email, phone, address, created_at, updated_at
-	// `
-
-	query := `
+    query := `
     INSERT INTO tbl_users (
         last_name, first_name, user_name, login_id, email, password,
         role_name, role_id, is_admin, login_session, last_login,
         currency_id, language_id, status_id, "order",
-        created_by, updated_by, deleted_at
+        created_by, updated_by
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-      *`
+    RETURNING *`
 
-	err = h.db.QueryRow(
-		query,
-		user.FirstName,
-		user.LastName,
-		user.Email,
-		hashedPassword,
-		user.Phone,
-		user.Address,
-	).Scan(&user.ID, &user.FirstName, &user.LastName, &user.Email, &user.Phone, &user.Address, &user.CreatedAt, &user.UpdatedAt)
+    err = h.db.QueryRow(
+        query,
+        user.LastName, user.FirstName, user.UserName, user.LoginID, user.Email, hashedPassword,
+        user.RoleName, user.RoleID, user.IsAdmin, user.LoginSession, user.LastLogin,
+        user.CurrencyID, user.LanguageID, user.StatusID, user.Order,
+        user.CreatedBy, user.UpdatedBy,
+    ).Scan(
+        &user.ID, &user.LastName, &user.FirstName, &user.UserName, &user.LoginID, &user.Email,
+        &user.Password, &user.RoleName, &user.RoleID, &user.IsAdmin, &user.LoginSession,
+        &user.LastLogin, &user.CurrencyID, &user.LanguageID, &user.StatusID, &user.Order,
+        &user.CreatedBy, &user.CreatedAt, &user.UpdatedBy, &user.UpdatedAt, &user.DeletedBy,
+        &user.DeletedAt,
+    )
 
-	if err != nil {
-		fmt.Println("error", err)
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error creating user",
-		})
-	}
+    if err != nil {
+        fmt.Println("Error creating user:", err)
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Error creating user",
+        })
+    }
 
-	// Return the created user
-	return c.Status(201).JSON(user)
+    user.Password = "" // Remove password from response
+    return c.Status(201).JSON(user)
 }
 
-// FUNCTION GET ALL USER
 func (h *UserHandler) GetUsers(c *fiber.Ctx) error {
-	query := `
-	SELECT id, first_name, last_name, email, phone, address, created_at, updated_at
-	FROM users
-	ORDER BY created_at DESC
-	`
+    query := `
+    SELECT *
+    FROM tbl_users
+    WHERE deleted_at IS NULL
+    ORDER BY created_at DESC`
 
-	rows, err := h.db.Query(query)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error fetching users",
-		})
-	}
-	defer rows.Close()
+    rows, err := h.db.Query(query)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Error fetching users",
+        })
+    }
+    defer rows.Close()
 
-	var users []models.User
+    users := make([]models.User, 0)
+    for rows.Next() {
+        var user models.User
+        err := rows.Scan(
+            &user.ID, &user.LastName, &user.FirstName, &user.UserName, &user.LoginID,
+            &user.Email, &user.Password, &user.RoleName, &user.RoleID, &user.IsAdmin,
+            &user.LoginSession, &user.LastLogin, &user.CurrencyID, &user.LanguageID,
+            &user.StatusID, &user.Order, &user.CreatedBy, &user.CreatedAt, &user.UpdatedBy,
+            &user.UpdatedAt, &user.DeletedBy, &user.DeletedAt,
+        )
+        if err != nil {
+            return c.Status(500).JSON(fiber.Map{
+                "error": "Error scanning user data",
+            })
+        }
+        user.Password = "" // Remove password from response
+        users = append(users, user)
+    }
 
-	for rows.Next() {
-		var user models.User
-
-		err := rows.Scan(
-			&user.ID,
-			&user.FirstName,
-			&user.LastName,
-			&user.Email,
-			&user.Phone,
-			&user.Address,
-			&user.CreatedAt,
-			&user.UpdatedAt,
-			&user.DeletedAt,
-		)
-
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{
-				"error": "Error scanning user data",
-			})
-		}
-		users = append(users, user)
-	}
-
-	return c.JSON(users)
+    return c.JSON(users)
 }
 
-// FUNCTION GET ALL USER BY ID
 func (h *UserHandler) GetUser(c *fiber.Ctx) error {
+    id := c.Params("id")
 
-	id := c.Params("id")
+    var user models.User
+    err := h.db.QueryRow("SELECT * FROM tbl_users WHERE id = $1 AND deleted_at IS NULL", id).Scan(
+        &user.ID, &user.LastName, &user.FirstName, &user.UserName, &user.LoginID,
+        &user.Email, &user.Password, &user.RoleName, &user.RoleID, &user.IsAdmin,
+        &user.LoginSession, &user.LastLogin, &user.CurrencyID, &user.LanguageID,
+        &user.StatusID, &user.Order, &user.CreatedBy, &user.CreatedAt, &user.UpdatedBy,
+        &user.UpdatedAt, &user.DeletedBy, &user.DeletedAt,
+    )
 
-	query := `
-		SELECT id, first_name, last_name, email, phone, address, created_at, updated_at, deleted_at
-	FROM users
-	WHERE id = $1
-	`
-	var user models.User
-	err := h.db.QueryRow(query, id).Scan(
-		&user.ID,
-		&user.FirstName,
-		&user.LastName,
-		&user.Email,
-		&user.Phone,
-		&user.Address,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.DeletedAt,
-	)
+    if err == sql.ErrNoRows {
+        return c.Status(404).JSON(fiber.Map{
+            "error": "User not found",
+        })
+    }
 
-	if err == sql.ErrNoRows {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "User not found",
-		})
-	}
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Error fetching user",
+        })
+    }
 
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error fetching user",
-		})
-	}
-
-	return c.JSON(user)
+    user.Password = "" // Remove password from response
+    return c.JSON(user)
 }
 
-// FUNCTION UPDATE USER
 func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
-	id := c.Params("id")
+    id := c.Params("id")
+    user := new(models.User)
 
-	// Check if user exists
-	var exists bool
-	err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)", id).Scan(&exists)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error checking user existence",
-		})
-	}
+    if err := c.BodyParser(user); err != nil {
+        return c.Status(400).JSON(fiber.Map{
+            "error": "Invalid request body",
+        })
+    }
 
-	if !exists {
-		return c.Status(404).JSON(fiber.Map{
-			"error": "User not found",
-		})
-	}
+    // Check if user exists
+    var exists bool
+    err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM tbl_users WHERE id = $1 AND deleted_at IS NULL)", id).Scan(&exists)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Error checking user existence",
+        })
+    }
+    if !exists {
+        return c.Status(404).JSON(fiber.Map{
+            "error": "User not found",
+        })
+    }
 
-	// Parse update data
-	user := new(models.User)
-	if err := c.BodyParser(user); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
-	}
 
-	// Update user data
-	query := `
-	UPDATE users
-	SET first_name = $1,
-		last_name = $2,
-		email = $3,
-		phone = $4,
-		address = $5,
-		updated_at = CURRENT_TIMESTAMP
-	WHERE id = $6
-	RETURNING id, first_name, last_name, email, phone, address, created_at, updated_at, 
-	`
+    if user.Email != "" {
+        var emailExists bool
+        err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM tbl_users WHERE email = $1 AND id != $2 AND deleted_at IS NULL)",
+            user.Email, id).Scan(&emailExists)
+        if err != nil {
+            return c.Status(500).JSON(fiber.Map{
+                "error": "Error checking email",
+            })
+        }
+        if emailExists {
+            return c.Status(400).JSON(fiber.Map{
+                "error": "Email already exists",
+            })
+        }
+    }
 
-	err = h.db.QueryRow(
-		query,
-		user.FirstName,
-		user.LastName,
-		user.Email,
-		user.Phone,
-		user.Address,
-		id,
-	).Scan(
-		&user.ID,
-		&user.FirstName,
-		&user.LastName,
-		&user.Email,
-		&user.Phone,
-		&user.Address,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&user.DeletedAt,
-	)
+    query := `
+    UPDATE tbl_users
+    SET last_name = $1, first_name = $2, user_name = $3, login_id = $4, email = $5,
+        role_name = $6, role_id = $7, is_admin = $8, login_session = $9, last_login = $10,
+        currency_id = $11, language_id = $12, status_id = $13, "order" = $14,
+        updated_by = $15, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $16 AND deleted_at IS NULL
+    RETURNING *`
 
-	if err != nil {
-		if err.Error() == "pq: duplicate key value violates unique constraint \"users_email_key\"" {
-			return c.Status(400).JSON(fiber.Map{
-				"error": "Email already exists",
-			})
-		}
-		return c.Status(500).JSON(fiber.Map{
-			"error": "Error updating user",
-		})
-	}
+    err = h.db.QueryRow(
+        query,
+        user.LastName, user.FirstName, user.UserName, user.LoginID, user.Email,
+        user.RoleName, user.RoleID, user.IsAdmin, user.LoginSession, user.LastLogin,
+        user.CurrencyID, user.LanguageID, user.StatusID, user.Order,
+        user.UpdatedBy, id,
+    ).Scan(
+        &user.ID, &user.LastName, &user.FirstName, &user.UserName, &user.LoginID,
+        &user.Email, &user.Password, &user.RoleName, &user.RoleID, &user.IsAdmin,
+        &user.LoginSession, &user.LastLogin, &user.CurrencyID, &user.LanguageID,
+        &user.StatusID, &user.Order, &user.CreatedBy, &user.CreatedAt, &user.UpdatedBy,
+        &user.UpdatedAt, &user.DeletedBy, &user.DeletedAt,
+    )
 
-	return c.JSON(user)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "error": "Error updating user",
+        })
+    }
+
+    user.Password = "" // Remove password from response
+    return c.JSON(user)
 }
 
 // FUNCTION DELETE USER
